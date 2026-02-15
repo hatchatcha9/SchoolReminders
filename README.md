@@ -1,36 +1,217 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# School Reminder
+
+A web application that helps students stay organized by integrating with Canvas LMS and Skyward, providing smart reminders and a unified dashboard for assignments and grades.
+
+## Features
+
+- **Canvas Integration** - Automatically syncs assignments, due dates, and grades from Canvas LMS
+- **Skyward Integration** - Connects to Skyward for grades and class schedules
+- **Smart Reminders** - Get notified about upcoming assignments and tests
+- **Locking Alerts** - Warnings when assignments are about to lock
+- **Dashboard** - Daily overview with priority-based task organization
+- **Calendar View** - Visual calendar with filtering and sorting options
+- **Grade Tracking** - View grades from both Canvas and Skyward in one place
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js 18+
+- npm or yarn
+- A Canvas LMS account with API access
+- (Optional) Skyward student account
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd school-reminder
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Create a `.env` file in the root directory:
+   ```env
+   # Canvas API Configuration
+   CANVAS_BASE_URL=https://your-school.instructure.com
+
+   # AI API (optional - for AI features)
+   # ANTHROPIC_API_KEY=your_key_here
+   # OPENAI_API_KEY=your_key_here
+   ```
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+### Connecting Canvas
+
+1. Go to **Settings** in the app
+2. Click on the **Canvas** tab
+3. Follow the instructions to get your Canvas API token:
+   - Go to your Canvas Settings page
+   - Scroll to "Approved Integrations"
+   - Click "+ New Access Token"
+   - Name it "School Reminder" and generate
+   - Copy the token and paste it in the app
+4. Click **Test Connection** to verify
+5. Click **Save Connection**
+
+### Connecting Skyward (Optional)
+
+1. Go to **Settings** in the app
+2. Click on the **Skyward** tab
+3. Enter your Skyward username and password
+4. Click **Test Connection** to verify
+5. Click **Save Connection**
+
+Note: Skyward credentials are stored locally on your device.
+
+## Usage
+
+### Dashboard
+
+The dashboard shows:
+- Quick stats (assignments due, urgent items, tests/quizzes)
+- Daily overview with AI-generated summary (requires AI API)
+- Upcoming assignments sorted by priority
+- Quick reminders for items due soon
+
+### Calendar
+
+- View assignments on a monthly calendar
+- Filter by type (test, quiz, assignment)
+- Filter by course or status
+- Sort by due date, course, or priority
+- Toggle between calendar and list view
+
+### Grades
+
+- View current grades from Canvas
+- See Skyward grades if connected
+- Track missing assignments
+- Calculate hypothetical grade changes
+
+### Notifications
+
+- Enable browser notifications for reminders
+- Configure reminder timing:
+  - 24 hours before due
+  - 6 hours before due
+  - 1 hour before due
+  - When assignments are about to lock
+- Set quiet hours to pause notifications
+
+## Project Structure
+
+```
+school-reminder/
+├── src/
+│   ├── app/                    # Next.js app router pages
+│   │   ├── api/               # API routes
+│   │   │   ├── canvas/        # Canvas API endpoints
+│   │   │   ├── skyward/       # Skyward API endpoints
+│   │   │   └── ai/            # AI feature endpoints
+│   │   ├── calendar/          # Calendar page
+│   │   ├── grades/            # Grades page
+│   │   └── setup/             # Settings page
+│   ├── components/            # React components
+│   │   ├── dashboard/         # Dashboard components
+│   │   ├── layout/            # Layout components
+│   │   ├── notifications/     # Notification components
+│   │   └── reminders/         # Reminder alert components
+│   ├── hooks/                 # Custom React hooks
+│   └── lib/                   # Utility libraries
+│       ├── cache.ts           # Data caching
+│       ├── notifications.ts   # Browser notifications
+│       ├── sync/              # Data synchronization
+│       ├── canvas/            # Canvas API client
+│       └── skyward/           # Skyward integration
+├── public/                    # Static assets
+└── package.json
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Framework:** Next.js 16 with App Router
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS
+- **State Management:** React hooks + localStorage
+- **API Integration:** Canvas REST API, Skyward web scraping
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Configuration
 
-## Learn More
+### Environment Variables
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `CANVAS_BASE_URL` | Your school's Canvas URL | Yes |
+| `ANTHROPIC_API_KEY` | Anthropic API key for AI features | No |
+| `OPENAI_API_KEY` | OpenAI API key for AI features | No |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Canvas Token Permissions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The Canvas API token needs access to:
+- Courses
+- Assignments
+- Submissions
+- Grades
 
-## Deploy on Vercel
+## Troubleshooting
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Canvas Connection Issues
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Verify your token is correct and hasn't expired
+- Check that your school's Canvas URL is correct
+- Ensure you have student access to the courses
+
+### Notifications Not Working
+
+1. Check browser notification permissions
+2. Verify notifications are enabled in Windows/macOS settings
+3. Make sure the browser isn't blocking notifications
+4. Try testing in an incognito window
+
+### Skyward Connection Issues
+
+- Skyward integration uses web scraping which may break if Skyward updates
+- Some schools may have different Skyward configurations
+- Contact support if your school's Skyward isn't working
+
+## Development
+
+### Running Tests
+
+```bash
+npm run test
+```
+
+### Building for Production
+
+```bash
+npm run build
+npm start
+```
+
+### Linting
+
+```bash
+npm run lint
+```
+
+## License
+
+This project is for educational purposes.
+
+## Acknowledgments
+
+- Canvas LMS API Documentation
+- Next.js team for the excellent framework
+- Tailwind CSS for styling utilities
