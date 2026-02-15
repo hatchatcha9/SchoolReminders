@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail } from '@/lib/db';
+import { getUserByEmail, initSchema } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth/password';
 import { createUserSession } from '@/lib/auth/session';
 
 export async function POST(request: NextRequest) {
   try {
+    // Ensure schema exists
+    await initSchema();
+
     const body = await request.json();
     const { email, password } = body;
 
@@ -16,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user
-    const user = getUserByEmail(email);
+    const user = await getUserByEmail(email);
     if (!user) {
       return NextResponse.json(
         { error: 'Invalid email or password' },

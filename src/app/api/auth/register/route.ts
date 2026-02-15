@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createUser, getUserByEmail } from '@/lib/db';
+import { createUser, getUserByEmail, initSchema } from '@/lib/db';
 import { hashPassword, validatePassword, validateEmail } from '@/lib/auth/password';
 import { createUserSession } from '@/lib/auth/session';
 
 export async function POST(request: NextRequest) {
   try {
+    // Ensure schema exists
+    await initSchema();
+
     const body = await request.json();
     const { email, password } = body;
 
@@ -27,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = getUserByEmail(email);
+    const existingUser = await getUserByEmail(email);
     if (existingUser) {
       return NextResponse.json(
         { error: 'An account with this email already exists' },
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     // Hash password and create user
     const passwordHash = await hashPassword(password);
-    const user = createUser(email, passwordHash);
+    const user = await createUser(email, passwordHash);
 
     // Create session
     await createUserSession(user.id);

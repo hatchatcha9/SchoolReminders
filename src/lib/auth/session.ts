@@ -13,7 +13,7 @@ export interface SessionUser {
  * Create a new session and set the cookie
  */
 export async function createUserSession(userId: string): Promise<string> {
-  const session = createSession(userId, SESSION_EXPIRY_DAYS);
+  const session = await createSession(userId, SESSION_EXPIRY_DAYS);
 
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, session.id, {
@@ -38,7 +38,7 @@ export async function getCurrentSession(): Promise<{ session: { id: string; expi
     return null;
   }
 
-  const result = getValidSession(sessionId);
+  const result = await getValidSession(sessionId);
 
   if (!result) {
     // Session expired or invalid, clear the cookie
@@ -74,7 +74,7 @@ export async function destroySession(): Promise<void> {
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (sessionId) {
-    deleteSession(sessionId);
+    await deleteSession(sessionId);
   }
 
   await clearSessionCookie();
@@ -97,8 +97,8 @@ async function clearSessionCookie(): Promise<void> {
 /**
  * Validate session from request (for API routes that don't use cookies())
  */
-export function validateSessionId(sessionId: string): { user: SessionUser } | null {
-  const result = getValidSession(sessionId);
+export async function validateSessionId(sessionId: string): Promise<{ user: SessionUser } | null> {
+  const result = await getValidSession(sessionId);
 
   if (!result) {
     return null;

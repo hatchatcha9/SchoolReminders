@@ -1,28 +1,32 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { createClient, Client } from '@libsql/client';
 import { randomUUID } from 'crypto';
 
-// Database path - uses data/ directory in project root
-const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'school-reminder.db');
+// Turso database client
+let db: Client | null = null;
 
-// Singleton database instance
-let db: Database.Database | null = null;
-
-function getDb(): Database.Database {
+function getDb(): Client {
   if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initSchema();
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+
+    if (!url) {
+      throw new Error('TURSO_DATABASE_URL environment variable is required');
+    }
+
+    db = createClient({
+      url,
+      authToken,
+    });
   }
   return db;
 }
 
-function initSchema(): void {
-  const database = db!;
+// Initialize schema
+export async function initSchema(): Promise<void> {
+  const database = getDb();
 
   // Users table
-  database.exec(`
+  await database.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -32,7 +36,7 @@ function initSchema(): void {
   `);
 
   // Sessions table
-  database.exec(`
+  await database.execute(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -43,7 +47,7 @@ function initSchema(): void {
   `);
 
   // User credentials table (encrypted)
-  database.exec(`
+  await database.execute(`
     CREATE TABLE IF NOT EXISTS user_credentials (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -59,11 +63,9 @@ function initSchema(): void {
   `);
 
   // Create indexes
-  database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-    CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id);
-  `);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)`);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id)`);
 }
 
 // User types
@@ -93,157 +95,187 @@ export interface UserCredential {
 }
 
 // User operations
-export function createUser(email: string, passwordHash: string): User {
+export async function createUser(email: string, passwordHash: string): Promise<User> {
   const database = getDb();
   const id = randomUUID();
 
-  const stmt = database.prepare(`
-    INSERT INTO users (id, email, password_hash)
-    VALUES (?, ?, ?)
-  `);
+  await database.execute({
+    sql: `INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)`,
+    args: [id, email.toLowerCase(), passwordHash],
+  });
 
-  stmt.run(id, email.toLowerCase(), passwordHash);
-
-  return getUserById(id)!;
+  const user = await getUserById(id);
+  if (!user) throw new Error('Failed to create user');
+  return user;
 }
 
-export function getUserByEmail(email: string): User | null {
+export async function getUserByEmail(email: string): Promise<User | null> {
   const database = getDb();
-  const stmt = database.prepare('SELECT * FROM users WHERE email = ?');
-  return stmt.get(email.toLowerCase()) as User | null;
+  const result = await database.execute({
+    sql: 'SELECT * FROM users WHERE email = ?',
+    args: [email.toLowerCase()],
+  });
+
+  if (result.rows.length === 0) return null;
+  return result.rows[0] as unknown as User;
 }
 
-export function getUserById(id: string): User | null {
+export async function getUserById(id: string): Promise<User | null> {
   const database = getDb();
-  const stmt = database.prepare('SELECT * FROM users WHERE id = ?');
-  return stmt.get(id) as User | null;
+  const result = await database.execute({
+    sql: 'SELECT * FROM users WHERE id = ?',
+    args: [id],
+  });
+
+  if (result.rows.length === 0) return null;
+  return result.rows[0] as unknown as User;
 }
 
 // Session operations
-export function createSession(userId: string, expiresInDays: number = 7): Session {
+export async function createSession(userId: string, expiresInDays: number = 7): Promise<Session> {
   const database = getDb();
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const stmt = database.prepare(`
-    INSERT INTO sessions (id, user_id, expires_at)
-    VALUES (?, ?, ?)
-  `);
+  await database.execute({
+    sql: `INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)`,
+    args: [id, userId, expiresAt],
+  });
 
-  stmt.run(id, userId, expiresAt);
-
-  return getSessionById(id)!;
+  const session = await getSessionById(id);
+  if (!session) throw new Error('Failed to create session');
+  return session;
 }
 
-export function getSessionById(id: string): Session | null {
+export async function getSessionById(id: string): Promise<Session | null> {
   const database = getDb();
-  const stmt = database.prepare('SELECT * FROM sessions WHERE id = ?');
-  return stmt.get(id) as Session | null;
+  const result = await database.execute({
+    sql: 'SELECT * FROM sessions WHERE id = ?',
+    args: [id],
+  });
+
+  if (result.rows.length === 0) return null;
+  return result.rows[0] as unknown as Session;
 }
 
-export function getValidSession(id: string): (Session & { user: User }) | null {
+export async function getValidSession(id: string): Promise<(Session & { user: User }) | null> {
   const database = getDb();
-  const stmt = database.prepare(`
-    SELECT s.*, u.id as user_id, u.email, u.created_at as user_created_at
-    FROM sessions s
-    JOIN users u ON s.user_id = u.id
-    WHERE s.id = ? AND s.expires_at > datetime('now')
-  `);
+  const result = await database.execute({
+    sql: `
+      SELECT s.*, u.id as uid, u.email, u.created_at as user_created_at
+      FROM sessions s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.id = ? AND s.expires_at > datetime('now')
+    `,
+    args: [id],
+  });
 
-  const result = stmt.get(id) as {
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0] as unknown as {
     id: string;
     user_id: string;
     expires_at: string;
     created_at: string;
+    uid: string;
     email: string;
     user_created_at: string;
-  } | undefined;
-
-  if (!result) return null;
+  };
 
   return {
-    id: result.id,
-    user_id: result.user_id,
-    expires_at: result.expires_at,
-    created_at: result.created_at,
+    id: row.id,
+    user_id: row.user_id,
+    expires_at: row.expires_at,
+    created_at: row.created_at,
     user: {
-      id: result.user_id,
-      email: result.email,
-      password_hash: '', // Don't expose password hash
-      created_at: result.user_created_at,
+      id: row.uid,
+      email: row.email,
+      password_hash: '',
+      created_at: row.user_created_at,
     },
   };
 }
 
-export function deleteSession(id: string): void {
+export async function deleteSession(id: string): Promise<void> {
   const database = getDb();
-  const stmt = database.prepare('DELETE FROM sessions WHERE id = ?');
-  stmt.run(id);
+  await database.execute({
+    sql: 'DELETE FROM sessions WHERE id = ?',
+    args: [id],
+  });
 }
 
-export function deleteUserSessions(userId: string): void {
+export async function deleteUserSessions(userId: string): Promise<void> {
   const database = getDb();
-  const stmt = database.prepare('DELETE FROM sessions WHERE user_id = ?');
-  stmt.run(userId);
+  await database.execute({
+    sql: 'DELETE FROM sessions WHERE user_id = ?',
+    args: [userId],
+  });
 }
 
-export function cleanExpiredSessions(): void {
+export async function cleanExpiredSessions(): Promise<void> {
   const database = getDb();
-  const stmt = database.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')");
-  stmt.run();
+  await database.execute("DELETE FROM sessions WHERE expires_at <= datetime('now')");
 }
 
 // Credential operations
-export function saveCredential(
+export async function saveCredential(
   userId: string,
   service: 'canvas' | 'skyward',
   encryptedData: string,
   iv: string,
   authTag: string
-): UserCredential {
+): Promise<UserCredential> {
   const database = getDb();
   const id = randomUUID();
 
-  // Use upsert to handle existing credentials
-  const stmt = database.prepare(`
-    INSERT INTO user_credentials (id, user_id, service, encrypted_data, iv, auth_tag)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT (user_id, service) DO UPDATE SET
-      encrypted_data = excluded.encrypted_data,
-      iv = excluded.iv,
-      auth_tag = excluded.auth_tag,
-      updated_at = datetime('now')
-  `);
+  // Check if credential exists
+  const existing = await getCredential(userId, service);
 
-  stmt.run(id, userId, service, encryptedData, iv, authTag);
+  if (existing) {
+    // Update existing
+    await database.execute({
+      sql: `UPDATE user_credentials SET encrypted_data = ?, iv = ?, auth_tag = ?, updated_at = datetime('now') WHERE user_id = ? AND service = ?`,
+      args: [encryptedData, iv, authTag, userId, service],
+    });
+  } else {
+    // Insert new
+    await database.execute({
+      sql: `INSERT INTO user_credentials (id, user_id, service, encrypted_data, iv, auth_tag) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [id, userId, service, encryptedData, iv, authTag],
+    });
+  }
 
-  return getCredential(userId, service)!;
+  const credential = await getCredential(userId, service);
+  if (!credential) throw new Error('Failed to save credential');
+  return credential;
 }
 
-export function getCredential(userId: string, service: 'canvas' | 'skyward'): UserCredential | null {
+export async function getCredential(userId: string, service: 'canvas' | 'skyward'): Promise<UserCredential | null> {
   const database = getDb();
-  const stmt = database.prepare('SELECT * FROM user_credentials WHERE user_id = ? AND service = ?');
-  return stmt.get(userId, service) as UserCredential | null;
+  const result = await database.execute({
+    sql: 'SELECT * FROM user_credentials WHERE user_id = ? AND service = ?',
+    args: [userId, service],
+  });
+
+  if (result.rows.length === 0) return null;
+  return result.rows[0] as unknown as UserCredential;
 }
 
-export function getUserCredentials(userId: string): UserCredential[] {
+export async function getUserCredentials(userId: string): Promise<UserCredential[]> {
   const database = getDb();
-  const stmt = database.prepare('SELECT * FROM user_credentials WHERE user_id = ?');
-  return stmt.all(userId) as UserCredential[];
+  const result = await database.execute({
+    sql: 'SELECT * FROM user_credentials WHERE user_id = ?',
+    args: [userId],
+  });
+
+  return result.rows as unknown as UserCredential[];
 }
 
-export function deleteCredential(userId: string, service: 'canvas' | 'skyward'): void {
+export async function deleteCredential(userId: string, service: 'canvas' | 'skyward'): Promise<void> {
   const database = getDb();
-  const stmt = database.prepare('DELETE FROM user_credentials WHERE user_id = ? AND service = ?');
-  stmt.run(userId, service);
-}
-
-// Cleanup on process exit
-if (typeof process !== 'undefined') {
-  process.on('exit', () => {
-    if (db) {
-      db.close();
-    }
+  await database.execute({
+    sql: 'DELETE FROM user_credentials WHERE user_id = ? AND service = ?',
+    args: [userId, service],
   });
 }
 

@@ -18,7 +18,7 @@ export async function getCanvasCredentials(): Promise<CanvasCredentials | null> 
   const session = await getCurrentSession();
   if (!session) return null;
 
-  const credential = getCredential(session.user.id, 'canvas');
+  const credential = await getCredential(session.user.id, 'canvas');
   if (!credential) return null;
 
   try {
@@ -44,7 +44,7 @@ export async function getSkywardCredentials(): Promise<SkywardCredentials | null
   const session = await getCurrentSession();
   if (!session) return null;
 
-  const credential = getCredential(session.user.id, 'skyward');
+  const credential = await getCredential(session.user.id, 'skyward');
   if (!credential) return null;
 
   try {

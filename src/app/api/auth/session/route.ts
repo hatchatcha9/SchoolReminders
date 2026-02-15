@@ -14,7 +14,7 @@ export async function GET() {
     }
 
     // Get user's connected services
-    const credentials = getUserCredentials(session.user.id);
+    const credentials = await getUserCredentials(session.user.id);
     const connectedServices = credentials.map(c => c.service);
 
     return NextResponse.json({

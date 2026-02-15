@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const encrypted = encryptCredentials(credentials);
 
     // Save to database
-    saveCredential(
+    await saveCredential(
       session.user.id,
       service,
       encrypted.encryptedData,
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const credential = getCredential(session.user.id, service);
+    const credential = await getCredential(session.user.id, service);
 
     if (!credential) {
       return NextResponse.json(
@@ -124,7 +124,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    deleteCredential(session.user.id, service);
+    await deleteCredential(session.user.id, service);
 
     return NextResponse.json({ success: true });
   } catch (error) {
