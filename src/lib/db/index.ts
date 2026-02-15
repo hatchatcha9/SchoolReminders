@@ -1,71 +1,60 @@
-import { createClient, Client } from '@libsql/client';
+import { neon } from '@neondatabase/serverless';
 import { randomUUID } from 'crypto';
 
-// Turso database client
-let db: Client | null = null;
+// Get database connection
+function getDb() {
+  const databaseUrl = process.env.DATABASE_URL;
 
-function getDb(): Client {
-  if (!db) {
-    const url = process.env.TURSO_DATABASE_URL;
-    const authToken = process.env.TURSO_AUTH_TOKEN;
-
-    if (!url) {
-      throw new Error('TURSO_DATABASE_URL environment variable is required');
-    }
-
-    db = createClient({
-      url,
-      authToken,
-    });
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is required');
   }
-  return db;
+
+  return neon(databaseUrl);
 }
 
 // Initialize schema
 export async function initSchema(): Promise<void> {
-  const database = getDb();
+  const sql = getDb();
 
   // Users table
-  await database.execute(`
+  await sql`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TIMESTAMP DEFAULT NOW()
     )
-  `);
+  `;
 
   // Sessions table
-  await database.execute(`
+  await sql`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      expires_at TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
     )
-  `);
+  `;
 
   // User credentials table (encrypted)
-  await database.execute(`
+  await sql`
     CREATE TABLE IF NOT EXISTS user_credentials (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       service TEXT NOT NULL CHECK (service IN ('canvas', 'skyward')),
       encrypted_data TEXT NOT NULL,
       iv TEXT NOT NULL,
       auth_tag TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE (user_id, service)
     )
-  `);
+  `;
 
   // Create indexes
-  await database.execute(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
-  await database.execute(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)`);
-  await database.execute(`CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id)`);
+  await sql`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id)`;
 }
 
 // User types
@@ -96,13 +85,13 @@ export interface UserCredential {
 
 // User operations
 export async function createUser(email: string, passwordHash: string): Promise<User> {
-  const database = getDb();
+  const sql = getDb();
   const id = randomUUID();
 
-  await database.execute({
-    sql: `INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)`,
-    args: [id, email.toLowerCase(), passwordHash],
-  });
+  await sql`
+    INSERT INTO users (id, email, password_hash)
+    VALUES (${id}, ${email.toLowerCase()}, ${passwordHash})
+  `;
 
   const user = await getUserById(id);
   if (!user) throw new Error('Failed to create user');
@@ -110,37 +99,31 @@ export async function createUser(email: string, passwordHash: string): Promise<U
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
-  const database = getDb();
-  const result = await database.execute({
-    sql: 'SELECT * FROM users WHERE email = ?',
-    args: [email.toLowerCase()],
-  });
+  const sql = getDb();
+  const result = await sql`SELECT * FROM users WHERE email = ${email.toLowerCase()}`;
 
-  if (result.rows.length === 0) return null;
-  return result.rows[0] as unknown as User;
+  if (result.length === 0) return null;
+  return result[0] as User;
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const database = getDb();
-  const result = await database.execute({
-    sql: 'SELECT * FROM users WHERE id = ?',
-    args: [id],
-  });
+  const sql = getDb();
+  const result = await sql`SELECT * FROM users WHERE id = ${id}`;
 
-  if (result.rows.length === 0) return null;
-  return result.rows[0] as unknown as User;
+  if (result.length === 0) return null;
+  return result[0] as User;
 }
 
 // Session operations
 export async function createSession(userId: string, expiresInDays: number = 7): Promise<Session> {
-  const database = getDb();
+  const sql = getDb();
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
 
-  await database.execute({
-    sql: `INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)`,
-    args: [id, userId, expiresAt],
-  });
+  await sql`
+    INSERT INTO sessions (id, user_id, expires_at)
+    VALUES (${id}, ${userId}, ${expiresAt})
+  `;
 
   const session = await getSessionById(id);
   if (!session) throw new Error('Failed to create session');
@@ -148,31 +131,25 @@ export async function createSession(userId: string, expiresInDays: number = 7): 
 }
 
 export async function getSessionById(id: string): Promise<Session | null> {
-  const database = getDb();
-  const result = await database.execute({
-    sql: 'SELECT * FROM sessions WHERE id = ?',
-    args: [id],
-  });
+  const sql = getDb();
+  const result = await sql`SELECT * FROM sessions WHERE id = ${id}`;
 
-  if (result.rows.length === 0) return null;
-  return result.rows[0] as unknown as Session;
+  if (result.length === 0) return null;
+  return result[0] as Session;
 }
 
 export async function getValidSession(id: string): Promise<(Session & { user: User }) | null> {
-  const database = getDb();
-  const result = await database.execute({
-    sql: `
-      SELECT s.*, u.id as uid, u.email, u.created_at as user_created_at
-      FROM sessions s
-      JOIN users u ON s.user_id = u.id
-      WHERE s.id = ? AND s.expires_at > datetime('now')
-    `,
-    args: [id],
-  });
+  const sql = getDb();
+  const result = await sql`
+    SELECT s.*, u.id as uid, u.email, u.created_at as user_created_at
+    FROM sessions s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.id = ${id} AND s.expires_at > NOW()
+  `;
 
-  if (result.rows.length === 0) return null;
+  if (result.length === 0) return null;
 
-  const row = result.rows[0] as unknown as {
+  const row = result[0] as {
     id: string;
     user_id: string;
     expires_at: string;
@@ -197,24 +174,18 @@ export async function getValidSession(id: string): Promise<(Session & { user: Us
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  const database = getDb();
-  await database.execute({
-    sql: 'DELETE FROM sessions WHERE id = ?',
-    args: [id],
-  });
+  const sql = getDb();
+  await sql`DELETE FROM sessions WHERE id = ${id}`;
 }
 
 export async function deleteUserSessions(userId: string): Promise<void> {
-  const database = getDb();
-  await database.execute({
-    sql: 'DELETE FROM sessions WHERE user_id = ?',
-    args: [userId],
-  });
+  const sql = getDb();
+  await sql`DELETE FROM sessions WHERE user_id = ${userId}`;
 }
 
 export async function cleanExpiredSessions(): Promise<void> {
-  const database = getDb();
-  await database.execute("DELETE FROM sessions WHERE expires_at <= datetime('now')");
+  const sql = getDb();
+  await sql`DELETE FROM sessions WHERE expires_at <= NOW()`;
 }
 
 // Credential operations
@@ -225,7 +196,7 @@ export async function saveCredential(
   iv: string,
   authTag: string
 ): Promise<UserCredential> {
-  const database = getDb();
+  const sql = getDb();
   const id = randomUUID();
 
   // Check if credential exists
@@ -233,16 +204,17 @@ export async function saveCredential(
 
   if (existing) {
     // Update existing
-    await database.execute({
-      sql: `UPDATE user_credentials SET encrypted_data = ?, iv = ?, auth_tag = ?, updated_at = datetime('now') WHERE user_id = ? AND service = ?`,
-      args: [encryptedData, iv, authTag, userId, service],
-    });
+    await sql`
+      UPDATE user_credentials
+      SET encrypted_data = ${encryptedData}, iv = ${iv}, auth_tag = ${authTag}, updated_at = NOW()
+      WHERE user_id = ${userId} AND service = ${service}
+    `;
   } else {
     // Insert new
-    await database.execute({
-      sql: `INSERT INTO user_credentials (id, user_id, service, encrypted_data, iv, auth_tag) VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [id, userId, service, encryptedData, iv, authTag],
-    });
+    await sql`
+      INSERT INTO user_credentials (id, user_id, service, encrypted_data, iv, auth_tag)
+      VALUES (${id}, ${userId}, ${service}, ${encryptedData}, ${iv}, ${authTag})
+    `;
   }
 
   const credential = await getCredential(userId, service);
@@ -251,32 +223,24 @@ export async function saveCredential(
 }
 
 export async function getCredential(userId: string, service: 'canvas' | 'skyward'): Promise<UserCredential | null> {
-  const database = getDb();
-  const result = await database.execute({
-    sql: 'SELECT * FROM user_credentials WHERE user_id = ? AND service = ?',
-    args: [userId, service],
-  });
+  const sql = getDb();
+  const result = await sql`
+    SELECT * FROM user_credentials WHERE user_id = ${userId} AND service = ${service}
+  `;
 
-  if (result.rows.length === 0) return null;
-  return result.rows[0] as unknown as UserCredential;
+  if (result.length === 0) return null;
+  return result[0] as UserCredential;
 }
 
 export async function getUserCredentials(userId: string): Promise<UserCredential[]> {
-  const database = getDb();
-  const result = await database.execute({
-    sql: 'SELECT * FROM user_credentials WHERE user_id = ?',
-    args: [userId],
-  });
-
-  return result.rows as unknown as UserCredential[];
+  const sql = getDb();
+  const result = await sql`SELECT * FROM user_credentials WHERE user_id = ${userId}`;
+  return result as UserCredential[];
 }
 
 export async function deleteCredential(userId: string, service: 'canvas' | 'skyward'): Promise<void> {
-  const database = getDb();
-  await database.execute({
-    sql: 'DELETE FROM user_credentials WHERE user_id = ? AND service = ?',
-    args: [userId, service],
-  });
+  const sql = getDb();
+  await sql`DELETE FROM user_credentials WHERE user_id = ${userId} AND service = ${service}`;
 }
 
 export { getDb };
