@@ -34,6 +34,36 @@ interface ScrapeResult {
   error?: string;
 }
 
+interface CourseDetails {
+  courseName: string;
+  teacher: string;
+  period: string;
+  currentGrade: string | null;
+  currentScore: number | null;
+  assignments: Array<{
+    name: string;
+    category: string;
+    score: number | null;
+    pointsPossible: number | null;
+    missing: boolean;
+    late: boolean;
+    dueDate: string | null;
+  }>;
+  categories: Array<{
+    name: string;
+    weight: number;
+    earnedPoints: number;
+    possiblePoints: number;
+    currentScore: number | null;
+  }>;
+}
+
+interface CourseDetailsResult {
+  success: boolean;
+  courseDetails?: CourseDetails;
+  error?: string;
+}
+
 // Helper to wait
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
