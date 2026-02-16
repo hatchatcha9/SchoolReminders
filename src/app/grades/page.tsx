@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/components/auth';
 
 interface QuarterGrade {
   quarter: string;
@@ -78,6 +79,8 @@ function calculateGPA(courses: SkywardCourse[]): string {
 }
 
 export default function GradesPage() {
+  const { connectedServices } = useAuth();
+
   // Skyward state
   const [skywardCourses, setSkywardCourses] = useState<SkywardCourse[]>([]);
   const [missingAssignments, setMissingAssignments] = useState<MissingAssignment[]>([]);
@@ -93,9 +96,9 @@ export default function GradesPage() {
   const [_dataSource, setDataSource] = useState<DataSource>('none');
   const [activeTab, setActiveTab] = useState<'canvas' | 'skyward'>('canvas');
 
-  // Connection states
-  const [canvasConnected, setCanvasConnected] = useState(false);
-  const [skywardConnected, setSkywardConnected] = useState(false);
+  // Connection states from auth
+  const canvasConnected = connectedServices.includes('canvas');
+  const skywardConnected = connectedServices.includes('skyward');
 
   // Grade calculator state
   const [calculatorOpen, setCalculatorOpen] = useState(false);
@@ -103,32 +106,24 @@ export default function GradesPage() {
   const [hypotheticalGrades, setHypotheticalGrades] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const canvasToken = localStorage.getItem('canvasToken');
-    const skyward = localStorage.getItem('skywardConnected') === 'true';
-
-    setCanvasConnected(!!canvasToken);
-    setSkywardConnected(skyward);
-
     // Prefer Canvas if connected, fall back to Skyward
-    if (canvasToken) {
+    if (canvasConnected) {
       setActiveTab('canvas');
-      fetchCanvasGrades(canvasToken);
-    } else if (skyward) {
+      fetchCanvasGrades();
+    } else if (skywardConnected) {
       setActiveTab('skyward');
       fetchSkywardGrades();
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [canvasConnected, skywardConnected]);
 
-  const fetchCanvasGrades = async (token: string) => {
+  const fetchCanvasGrades = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/canvas/courses', {
-        headers: { 'x-canvas-token': token },
-      });
+      const response = await fetch('/api/canvas/courses');
 
       if (!response.ok) {
         throw new Error('Failed to fetch Canvas grades');
@@ -150,20 +145,9 @@ export default function GradesPage() {
       setLoading(true);
       setError(null);
 
-      const username = localStorage.getItem('skywardUsername');
-      const password = localStorage.getItem('skywardPassword');
-
-      if (!username || !password) {
-        throw new Error('Skyward credentials not found');
-      }
-
       const response = await fetch('/api/skyward/grades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username,
-          password: atob(password),
-        }),
       });
 
       if (!response.ok) {
@@ -190,9 +174,8 @@ export default function GradesPage() {
     setError(null);
 
     if (tab === 'canvas' && canvasConnected) {
-      const token = localStorage.getItem('canvasToken');
-      if (token && canvasCourses.length === 0) {
-        fetchCanvasGrades(token);
+      if (canvasCourses.length === 0) {
+        fetchCanvasGrades();
       }
     } else if (tab === 'skyward' && skywardConnected) {
       if (skywardCourses.length === 0) {
@@ -270,8 +253,7 @@ export default function GradesPage() {
 
   const handleRefresh = () => {
     if (activeTab === 'canvas' && canvasConnected) {
-      const token = localStorage.getItem('canvasToken');
-      if (token) fetchCanvasGrades(token);
+      fetchCanvasGrades();
     } else if (activeTab === 'skyward' && skywardConnected) {
       fetchSkywardGrades();
     }

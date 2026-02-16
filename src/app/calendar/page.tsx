@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import CalendarView from '@/components/calendar/CalendarView';
+import { useAuth } from '@/components/auth';
 
 interface Assignment {
   id: string;
@@ -79,9 +80,12 @@ function formatDate(date: Date): string {
 }
 
 export default function CalendarPage() {
+  const { connectedServices } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [connected, setConnected] = useState(false);
+
+  // Connection state from auth
+  const connected = connectedServices.includes('canvas');
 
   // View and filter state
   const [viewMode, setViewMode] = useState<ViewMode>('calendar');
@@ -92,20 +96,16 @@ export default function CalendarPage() {
   const [sortAsc, setSortAsc] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('canvasToken');
-    if (token) {
-      setConnected(true);
-      fetchAssignments(token);
+    if (connected) {
+      fetchAssignments();
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [connected]);
 
-  const fetchAssignments = async (token: string) => {
+  const fetchAssignments = async () => {
     try {
-      const response = await fetch('/api/canvas/assignments?days=60', {
-        headers: { 'x-canvas-token': token },
-      });
+      const response = await fetch('/api/canvas/assignments?days=60');
 
       if (!response.ok) throw new Error('Failed to fetch');
 
@@ -256,7 +256,7 @@ export default function CalendarPage() {
               </div>
               {connected && (
                 <button
-                  onClick={() => fetchAssignments(localStorage.getItem('canvasToken') || '')}
+                  onClick={() => fetchAssignments()}
                   disabled={loading}
                   className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                 >

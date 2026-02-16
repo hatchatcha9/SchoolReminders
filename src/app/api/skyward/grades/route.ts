@@ -1,16 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSkywardClient } from '@/lib/skyward/puppeteer-client';
+import { getSkywardCredentials } from '@/lib/auth/credentials';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const { username, password } = await request.json();
+    // Get credentials from database
+    const credentials = await getSkywardCredentials();
 
-    if (!username || !password) {
+    if (!credentials) {
       return NextResponse.json(
-        { error: 'Username and password are required' },
-        { status: 400 }
+        { error: 'Skyward not connected. Please connect Skyward in settings.' },
+        { status: 401 }
       );
     }
+
+    const { username, password } = credentials;
 
     const client = getSkywardClient();
     const result = await client.scrapeGrades(username, password);
