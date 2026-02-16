@@ -1,7 +1,5 @@
-import puppeteer from 'puppeteer';
-import { Browser, Page } from 'puppeteer';
-import * as fs from 'fs';
-import * as path from 'path';
+import puppeteer from 'puppeteer-core';
+import { Browser, Page } from 'puppeteer-core';
 
 const SKYWARD_LOGIN_URL = 'https://student.canyonsdistrict.org/scripts/wsisa.dll/WService=wsEAplus/seplog01.w';
 
@@ -110,20 +108,17 @@ export class SkywardPuppeteerClient {
     }
 
     if (!this.browser) {
-      this.browser = await puppeteer.launch({
-        headless: false, // Visible mode required - Skyward detects headless browsers
-        protocolTimeout: 120000, // 2 minute timeout for protocol operations
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-web-security',
-          '--disable-features=IsolateOrigins,site-per-process',
-          '--window-size=1366,768'
-        ],
-        ignoreDefaultArgs: ['--enable-automation'],
-      });
+      const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
+
+      if (browserlessApiKey) {
+        // Connect to Browserless.io for serverless environments
+        this.browser = await puppeteer.connect({
+          browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessApiKey}&stealth=true`,
+          protocolTimeout: 120000,
+        });
+      } else {
+        throw new Error('BROWSERLESS_API_KEY environment variable is required for Skyward integration');
+      }
     }
   }
 
@@ -172,17 +167,9 @@ export class SkywardPuppeteerClient {
   }
 
   private async saveDebugScreenshot(page: Page, name: string): Promise<void> {
+    // Screenshots disabled in serverless environment
     if (this.debugMode) {
-      try {
-        const debugDir = path.join(process.cwd(), 'debug');
-        if (!fs.existsSync(debugDir)) {
-          fs.mkdirSync(debugDir, { recursive: true });
-        }
-        await page.screenshot({ path: path.join(debugDir, `${name}.png`), fullPage: true });
-        console.log(`Debug screenshot saved: ${name}.png`);
-      } catch (e) {
-        console.error('Failed to save screenshot:', e);
-      }
+      console.log(`Debug checkpoint: ${name}`);
     }
   }
 
