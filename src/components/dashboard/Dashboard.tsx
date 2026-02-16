@@ -191,6 +191,7 @@ export default function Dashboard() {
   const { connectedServices, isLoading: authLoading, refreshSession } = useAuth();
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<Assignment[]>(mockAssignments);
+  const [hasRealData, setHasRealData] = useState(false); // Track if we have real Canvas data
   const [_courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -225,6 +226,7 @@ export default function Dashboard() {
       if (cachedAssignments && cachedAssignments.length > 0) {
         const formattedAssignments = formatCanvasAssignments(cachedAssignments);
         setAssignments(formattedAssignments);
+        setHasRealData(true); // Cached data is also real data
         setLoading(false);
 
         // Still fetch fresh data in background if cache is stale
@@ -286,19 +288,19 @@ export default function Dashboard() {
     }
   }, [assignments]);
 
-  // Schedule notifications and fetch overview when assignments change
+  // Schedule notifications and fetch overview when real assignments are loaded
   useEffect(() => {
-    if (assignments.length > 0 && connected) {
+    if (assignments.length > 0 && connected && hasRealData) {
       // Schedule notifications for urgent items
       const prefs = getNotificationPrefs();
       if (prefs.enabled) {
         scheduleUrgentNotifications(assignments);
       }
 
-      // Fetch daily overview
+      // Fetch daily overview only when we have real data
       fetchDailyOverview();
     }
-  }, [assignments, connected, fetchDailyOverview]);
+  }, [assignments, connected, hasRealData, fetchDailyOverview]);
 
   const handleEnableNotifications = async () => {
     const granted = await requestPermission();
@@ -341,6 +343,7 @@ export default function Dashboard() {
 
       const formattedAssignments = formatCanvasAssignments(data.assignments);
       setAssignments(formattedAssignments);
+      setHasRealData(true); // Mark that we have real Canvas data
       setError(null);
 
       // Update last sync time

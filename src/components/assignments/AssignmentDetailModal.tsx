@@ -131,10 +131,10 @@ export default function AssignmentDetailModal({
             {/* Dates */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-gray-50 dark:bg-gray-750 rounded-lg p-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                <p className="text-xs text-gray-900 dark:text-gray-200 uppercase tracking-wide mb-1 font-semibold">
                   Due Date
                 </p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                <p className="text-sm font-medium text-black dark:text-white">
                   {formatDate(assignment.dueDate)}
                 </p>
               </div>
@@ -152,10 +152,10 @@ export default function AssignmentDetailModal({
 
             {/* Description */}
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <h3 className="text-sm font-semibold text-black dark:text-white mb-2">
                 Description
               </h3>
-              <div className="bg-gray-50 dark:bg-gray-750 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              <div className="bg-gray-50 dark:bg-gray-750 rounded-lg p-4 text-sm text-black dark:text-white whitespace-pre-wrap">
                 {cleanDescription}
               </div>
             </div>
