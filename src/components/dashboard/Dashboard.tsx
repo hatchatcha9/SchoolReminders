@@ -255,14 +255,24 @@ export default function Dashboard() {
 
   const fetchDailyOverview = useCallback(async () => {
     // Don't fetch if we don't have real data
-    if (!hasRealData) return;
+    if (!hasRealData || assignments.length === 0) return;
 
-    // Check cache first
-    const cacheKey = `daily-overview-${new Date().toDateString()}`;
+    // Create cache key that includes assignment IDs to invalidate when data changes
+    const assignmentIds = assignments.map(a => a.id).sort().join(',');
+    const cacheKey = `daily-overview-${new Date().toDateString()}-${assignmentIds.slice(0, 50)}`;
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
       setDailyOverview(cached);
       return;
+    }
+
+    // Clear any old overview caches from today (with different assignment data)
+    const oldCachePrefix = `daily-overview-${new Date().toDateString()}`;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(oldCachePrefix) && key !== cacheKey) {
+        localStorage.removeItem(key);
+      }
     }
 
     setLoadingOverview(true);

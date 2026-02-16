@@ -152,10 +152,10 @@ export default function AssignmentDetailModal({
 
             {/* Description */}
             <div>
-              <h3 className="text-sm font-semibold text-black dark:text-white mb-2">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
                 Description
               </h3>
-              <div className="bg-gray-50 dark:bg-gray-750 rounded-lg p-4 text-sm text-black dark:text-white whitespace-pre-wrap">
+              <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-4 text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
                 {cleanDescription}
               </div>
             </div>
