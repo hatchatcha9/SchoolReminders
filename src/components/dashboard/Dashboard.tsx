@@ -190,7 +190,7 @@ function formatCanvasAssignments(rawAssignments: CanvasAssignment[]): Assignment
 export default function Dashboard() {
   const { connectedServices, isLoading: authLoading, refreshSession } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [assignments, setAssignments] = useState<Assignment[]>(mockAssignments);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [hasRealData, setHasRealData] = useState(false); // Track if we have real Canvas data
   const [_courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -239,6 +239,8 @@ export default function Dashboard() {
 
       fetchCourses();
     } else {
+      // Not connected - show mock data for demo
+      setAssignments(mockAssignments);
       setLoading(false);
     }
 
@@ -252,6 +254,9 @@ export default function Dashboard() {
   }, [authLoading, canvasConnected]);
 
   const fetchDailyOverview = useCallback(async () => {
+    // Don't fetch if we don't have real data
+    if (!hasRealData) return;
+
     // Check cache first
     const cacheKey = `daily-overview-${new Date().toDateString()}`;
     const cached = localStorage.getItem(cacheKey);
@@ -286,7 +291,7 @@ export default function Dashboard() {
     } finally {
       setLoadingOverview(false);
     }
-  }, [assignments]);
+  }, [assignments, hasRealData]);
 
   // Schedule notifications and fetch overview when real assignments are loaded
   useEffect(() => {
@@ -352,6 +357,7 @@ export default function Dashboard() {
       console.error('Error fetching assignments:', err);
       setError('Failed to load assignments from Canvas');
       setAssignments(mockAssignments);
+      setHasRealData(false);
     } finally {
       setLoading(false);
     }
@@ -377,6 +383,8 @@ export default function Dashboard() {
       await fetch('/api/credentials?service=canvas', { method: 'DELETE' });
       await refreshSession();
       setAssignments(mockAssignments);
+      setHasRealData(false);
+      setDailyOverview(null);
     } catch (err) {
       console.error('Disconnect error:', err);
     }
